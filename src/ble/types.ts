@@ -4,7 +4,7 @@ import type {
   ScaleReading,
   ScaleAuth,
 } from '../interfaces/scale-adapter.js';
-import type { WeightUnit, MqttProxyConfig, EsphomeProxyConfig } from '../config/schema.js';
+import type { WeightUnit } from '../config/schema.js';
 import { createLogger } from '../logger.js';
 import { errMsg } from '../utils/error.js';
 export { errMsg };
@@ -100,7 +100,7 @@ export const IMPEDANCE_GRACE_MS = 12_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type BleHandlerName = 'auto' | 'mqtt-proxy' | 'esphome-proxy';
+export type BleHandlerName = 'auto';
 
 export interface ScanOptions {
   targetMac?: string;
@@ -111,8 +111,6 @@ export interface ScanOptions {
   onLiveData?: (reading: ScaleReading) => void;
   abortSignal?: AbortSignal;
   bleHandler?: BleHandlerName;
-  mqttProxy?: MqttProxyConfig;
-  esphomeProxy?: EsphomeProxyConfig;
   bleAdapter?: string;
 }
 

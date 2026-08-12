@@ -459,7 +459,10 @@ export function waitForRawReading(
 
       if (onLiveData) onLiveData(reading);
 
-      if (reading.timestamp) {
+      // HS2S offline/anon historic that should still resolve immediately
+      // (continuous single-shot and 30s poll use device timestamp, no live frame)
+      const forceLive = (reading as any)._forceLive;
+      if (reading.timestamp && !forceLive) {
         if (!adapter.isComplete(reading)) return;
         if (history.push(reading)) {
           bleLog.debug(
@@ -469,6 +472,7 @@ export function waitForRawReading(
         }
         return;
       }
+      if (forceLive) delete (reading as any)._forceLive;
 
       if (adapter.isComplete(reading)) {
         const final = adapter.isFinal ? adapter.isFinal(reading) : true;

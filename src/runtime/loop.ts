@@ -1,12 +1,9 @@
-import type { RawReading } from '../ble/shared.js';
-import { abortableSleep } from '../ble/types.js';
 import { createLogger } from '../logger.js';
 import { errMsg } from '../utils/error.js';
+import type { RawReading } from '../ble/shared.js';
+import { abortableSleep } from '../ble/types.js';
 
 const log = createLogger('Sync');
-
-const BACKOFF_INITIAL_MS = 5_000;
-const BACKOFF_MAX_MS = 60_000;
 
 export interface ReadingSource {
   start?(): Promise<void>;
@@ -14,71 +11,33 @@ export interface ReadingSource {
   nextReading(signal: AbortSignal): Promise<RawReading>;
 }
 
-export interface RuntimeLoopDeps {
+export interface SimpleLoopDeps {
   source: ReadingSource;
   processReading: (raw: RawReading) => Promise<boolean>;
   signal: AbortSignal;
-  touchHeartbeat: () => void;
-  isReloadRequested: () => boolean;
-  clearReloadRequest: () => void;
-  onReload?: () => Promise<void>;
-  onSourceReload?: () => void;
-  onSuccess?: () => Promise<void> | void;
-  onFailure?: (err: unknown) => void;
-  failureLogPrefix?: string;
+  scanCooldownSec: number;
+  continuous: boolean;
 }
 
-/**
- * Exponential backoff on iteration error: 5s -> 10s -> 20s -> 40s -> 60s cap.
- */
-export async function runContinuousLoop(deps: RuntimeLoopDeps): Promise<void> {
-  const {
-    source,
-    processReading,
-    signal,
-    touchHeartbeat,
-    isReloadRequested,
-    clearReloadRequest,
-    onReload,
-    onSourceReload,
-    onSuccess,
-    onFailure,
-    failureLogPrefix = 'Error processing reading',
-  } = deps;
-
-  let backoffMs = 0;
-
+export async function runContinuousLoop(deps: SimpleLoopDeps): Promise<void> {
+  const { source, processReading, signal, scanCooldownSec, continuous } = deps;
   try {
     while (!signal.aborted) {
       try {
-        touchHeartbeat();
-
-        // Start hook is idempotent in every concrete source: ReadingWatcher
-        // (mqtt-proxy, esphome-proxy) early-returns when `this.started === true`,
-        // and PollReadingSource has no `start` at all. Calling on every iteration
-        // costs one branch and lets the loop handle late-init sources uniformly.
         await source.start?.();
-
-        if (isReloadRequested()) {
-          await onReload?.();
-          clearReloadRequest();
-          onSourceReload?.();
-        }
-
         const raw = await source.nextReading(signal);
         await processReading(raw);
-
-        backoffMs = 0;
-
-        if (signal.aborted) break;
-        await onSuccess?.();
+        if (!continuous) break;
       } catch (err) {
         if (signal.aborted) break;
-        onFailure?.(err);
-        backoffMs = backoffMs === 0 ? BACKOFF_INITIAL_MS : Math.min(backoffMs * 2, BACKOFF_MAX_MS);
-        log.info(`${failureLogPrefix}, retrying in ${backoffMs / 1000}s... (${errMsg(err)})`);
-        await abortableSleep(backoffMs, signal).catch(() => {});
+        log.error(`Error: ${errMsg(err)}, retrying in ${scanCooldownSec}s...`);
+        await abortableSleep(scanCooldownSec * 1000, signal).catch(() => {});
+        if (!continuous) break;
+        continue;
       }
+      if (signal.aborted || !continuous) break;
+      log.info(`Cooldown ${scanCooldownSec}s...`);
+      await abortableSleep(scanCooldownSec * 1000, signal).catch(() => {});
     }
   } finally {
     await source.stop?.();

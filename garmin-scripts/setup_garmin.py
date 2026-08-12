@@ -74,25 +74,56 @@ def authenticate(email, password, token_dir):
         os.makedirs(token_dir, exist_ok=True)
         cleanup_legacy_tokens(token_dir)
 
-        garmin = Garmin(email, password, return_on_mfa=True)
+        try:
+            garmin = Garmin(email, password, return_on_mfa=True)
+        except TypeError:
+            garmin = Garmin(email, password)
 
         print("[Setup] Logging in...")
-        # In 0.3.x, login(tokenstore) auto-dumps tokens on successful
-        # credential login (swallows dump errors silently via contextlib).
-        result = garmin.login(token_dir)
+        # Try 0.3.x path first (login with tokenstore), fallback to 0.2.x garth
+        try:
+            result = garmin.login(token_dir)
+        except FileNotFoundError as e:
+            # 0.2.8: tokenstore doesn't exist yet, need explicit garth login
+            if "oauth" in str(e):
+                garmin.garth.login(email, password)
+                garmin.garth.dump(token_dir)
+                result = True
+            else:
+                raise
+        except Exception as e:
+            # 0.2.8 may raise other load errors, try garth login
+            if "oauth" in str(e).lower() or "token" in str(e).lower():
+                try:
+                    garmin.garth.login(email, password)
+                    garmin.garth.dump(token_dir)
+                    result = True
+                except Exception:
+                    raise e
+            else:
+                raise
 
-        # Handle 2FA/MFA challenge
+        # Handle 2FA/MFA challenge (0.3.x)
         if isinstance(result, tuple) and result[0] == "needs_mfa":
             print("[Setup] Two-factor authentication required.")
             mfa_code = input("[Setup] Enter the MFA code from your authenticator app: ").strip()
             garmin.resume_login(result[1], mfa_code)
             print("[Setup] MFA verification successful.")
             # resume_login() does NOT auto-save; dump explicitly.
-            garmin.client.dump(token_dir)
+            try:
+                garmin.client.dump(token_dir)
+            except AttributeError:
+                garmin.garth.dump(token_dir)
         else:
             # Belt-and-suspenders: login()'s auto-dump suppresses exceptions,
             # so re-dump to surface any write errors here.
-            garmin.client.dump(token_dir)
+            try:
+                garmin.client.dump(token_dir)
+            except AttributeError:
+                try:
+                    garmin.garth.dump(token_dir)
+                except Exception:
+                    pass
 
         print(f"[Setup] Tokens saved to: {token_dir}")
         return True

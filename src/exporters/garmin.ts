@@ -19,6 +19,13 @@ let cachedPython: string | undefined;
 
 function findPython(): Promise<string> {
   if (cachedPython) return Promise.resolve(cachedPython);
+  // Prefer local venv if present (Pi portable), fallback to system python
+  const venvPython = join(ROOT, '.venv', 'bin', 'python');
+  const { existsSync } = require('node:fs') as typeof import('node:fs');
+  if (existsSync(venvPython)) {
+    cachedPython = venvPython;
+    return Promise.resolve(cachedPython);
+  }
   return new Promise((resolve) => {
     const check = spawn('python3', ['--version'], { stdio: 'ignore' });
     check.on('error', () => {
@@ -58,12 +65,16 @@ function uploadToGarmin(
   payload: GarminUploadPayload,
   pythonCmd: string,
   tokenDir?: string,
+  email?: string,
+  password?: string,
 ): Promise<ExportResult> {
   return new Promise<ExportResult>((resolve, reject) => {
     const scriptPath: string = join(ROOT, 'garmin-scripts', 'garmin_upload.py');
     const args: string[] = [scriptPath];
 
-    if (tokenDir) {
+    if (email) args.push('--email', email);
+    if (password) args.push('--password', password);
+    if (tokenDir && !email) {
       args.push('--token-dir', expandTilde(tokenDir));
     }
 
@@ -166,7 +177,7 @@ export class GarminExporter implements Exporter {
 
     return withRetry(
       async () => {
-        const result = await uploadToGarmin(payload, pythonCmd, this.entryConfig.token_dir);
+        const result = await uploadToGarmin(payload, pythonCmd, this.entryConfig.token_dir, this.entryConfig.email, this.entryConfig.password);
         if (result.success) log.info('Garmin upload succeeded.');
         return result;
       },

@@ -1,0 +1,23 @@
+version: 1
+scale:
+  weight_unit: kg
+  height_unit: cm
+ble:
+  scale_mac: null  # e.g. "AA:BB:CC:DD:EE:FF" or null for auto
+  adapter: null    # e.g. hci0
+users:
+  - name: example
+    height: 175
+    birth_date: 1990-01-01
+    gender: male
+    is_athlete: false
+    exporters:
+      - type: garmin
+        email: "your_email@example.com"
+        password: "your_password"  # fresh login each upload
+        # token_dir: ./garmin-tokens  # optional fallback
+runtime:
+  continuous_mode: true
+  scan_cooldown: 30
+  dry_run: false
+  debug: false

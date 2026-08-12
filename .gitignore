@@ -38,6 +38,7 @@ firmware/*.bin
 
 # Garmin tokens (should not be committed)
 .garmin_tokens/
+garmin-tokens/
 .garmin_renpho_tokens/
 
 # Docker Compose (local overrides)
@@ -52,3 +53,4 @@ strava-tokens/
 # VitePress
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+state.json

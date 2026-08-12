@@ -3,58 +3,22 @@ import type { ScaleAdapter } from '../interfaces/scale-adapter.js';
 import { scanAndReadRaw } from '../ble/index.js';
 import { withTimeout, POLL_CYCLE_TIMEOUT_MS } from '../ble/types.js';
 import { resolveUserProfile } from '../config/resolve.js';
-import { fmtWeight } from './format.js';
 import type { AppContext } from './context.js';
 import type { ReadingSource } from './loop.js';
 
-/**
- * Wraps `scanAndReadRaw` as a `ReadingSource`. Stateless: hot-swap fields
- * (scaleMac, weightUnit, mqttProxy, ...) take effect on the next cycle.
- */
 export class PollReadingSource implements ReadingSource {
-  constructor(
-    private readonly ctx: AppContext,
-    private readonly adapters: ScaleAdapter[],
-  ) {}
-
+  constructor(private readonly ctx: AppContext, private readonly adapters: ScaleAdapter[]) {}
   async nextReading(signal: AbortSignal): Promise<RawReading> {
-    const primaryUser = this.ctx.config.users[0];
-    const profile = resolveUserProfile(primaryUser, this.ctx.config.scale);
-
-    // Hard deadline on the whole cycle. dbus-next never rejects an in-flight
-    // MessageBus.call() when the socket dies, so a broken transport would park
-    // here forever while the heartbeat kept ticking and the consecutive-failure
-    // watchdog was never reached (#290). withTimeout races via Promise.race, so
-    // an abandoned scan stays parked; that is acceptable because the next
-    // getAdapter() destroys the connection under it and the watchdog bounds the
-    // process lifetime. Only the native poll path is wrapped: the proxy watchers
-    // wait indefinitely for a weigh-in by design.
+    const user = this.ctx.config.users[0];
+    const profile = resolveUserProfile(user, this.ctx.config.scale);
     const scan = scanAndReadRaw({
       targetMac: this.ctx.scaleMac,
       adapters: this.adapters,
       profile,
-      scaleAuth: {
-        pin: primaryUser.beurer_pin,
-        userIndex: primaryUser.beurer_user_index,
-      },
       weightUnit: this.ctx.weightUnit,
       abortSignal: signal,
-      bleHandler: this.ctx.bleHandler,
-      mqttProxy: this.ctx.mqttProxy,
-      esphomeProxy: this.ctx.esphomeProxy,
       bleAdapter: this.ctx.bleAdapter,
-      onLiveData: (reading) => {
-        const impStr: string = reading.impedance > 0 ? `${reading.impedance} Ohm` : 'Measuring...';
-        process.stdout.write(
-          `\r  Weight: ${fmtWeight(reading.weight, this.ctx.weightUnit)} | Impedance: ${impStr}      `,
-        );
-      },
     });
-
-    return withTimeout(
-      scan,
-      POLL_CYCLE_TIMEOUT_MS,
-      `Scan cycle exceeded ${POLL_CYCLE_TIMEOUT_MS / 1000}s and was abandoned (transport wedge?)`,
-    );
+    return withTimeout(scan, POLL_CYCLE_TIMEOUT_MS, `Scan cycle exceeded ${POLL_CYCLE_TIMEOUT_MS/1000}s`);
   }
 }
