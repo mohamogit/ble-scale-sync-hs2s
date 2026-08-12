@@ -21,6 +21,10 @@ export async function processReading(
   const profile = resolveUserProfile(user, ctx.config.scale);
   const state = await loadState(statePath);
 
+  // Server time - we pulled data at this moment, disconnect already done
+  // (scanAndReadRaw returns only after GATT disconnect). Upload will use this.
+  const serverNow = new Date();
+
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
@@ -29,14 +33,15 @@ export async function processReading(
     const reading = all[i];
     const isLast = i === all.length - 1;
 
-    // state-based dedup: same timestamp + weight within 0.1kg
+    // Dedup based on DEVICE timestamp + weight (to detect truly new record)
+    // Even though we upload with server time, we need device ts to know if it's new.
     if (isDuplicate(state, reading.timestamp, reading.weight)) {
-      log.info(`Skipping duplicate: ${fmtWeight(reading.weight, ctx.weightUnit)} @ ${reading.timestamp?.toISOString()}`);
+      log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);
       continue;
     }
 
     const payload = raw.adapter.computeMetrics(reading, profile);
-    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} / ${payload.impedance} Ohm${reading.timestamp ? ` [historic ${reading.timestamp.toISOString()}]` : ''}`);
+    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} / ${payload.impedance} Ohm [device ts ${reading.timestamp?.toISOString() ?? 'none'} → server ${serverNow.toISOString()}]`);
     log.info(`  BMI ${payload.bmi} Fat ${payload.bodyFatPercent}% Water ${payload.waterPercent}%`);
 
     if (ctx.dryRun || !exporters) {
@@ -49,22 +54,25 @@ export async function processReading(
       latestReading = reading;
     }
 
+    // Upload uses SERVER time, not device RTC (avoids drift / battery reset issues)
     const context = {
       userName: user.name,
       userSlug: user.slug ?? 'user',
       userConfig: user as any,
-      ...(reading.timestamp ? { timestamp: reading.timestamp } : {}),
+      timestamp: serverNow,
     };
 
     const { success } = await dispatchExports(exporters, payload, context as any);
     if (isLast) lastSuccess = success;
   }
 
+  // Save device timestamp for dedup, not server time
   if (latestPayload && latestReading && lastSuccess) {
     await saveState(
       { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight },
       statePath,
     );
+    log.info(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
   }
 
   return lastSuccess;

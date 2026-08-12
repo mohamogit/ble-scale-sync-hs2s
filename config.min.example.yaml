@@ -18,6 +18,6 @@ users:
         # token_dir: ./garmin-tokens  # optional fallback
 runtime:
   continuous_mode: true
-  scan_cooldown: 30
+  scan_cooldown: 60
   dry_run: false
   debug: false
