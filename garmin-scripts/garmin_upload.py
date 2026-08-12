@@ -43,15 +43,52 @@ def has_legacy_only_tokens(token_dir):
 
 
 def get_garmin_client(token_dir=None, email=None, password=None):
-    # Fresh login with email/password (preferred, stateless, no token expiry)
-    if email and password:
-        log(f"[Garmin] Fresh login as {email}")
-        garmin = Garmin(email, password)
-        garmin.login()
-        log("[Garmin] Authenticated (fresh login).")
-        return garmin
-
     token_dir = get_token_dir(token_dir)
+    # Try token first (avoid IP rate limit)
+    try:
+        log(f"[Garmin] Trying token login from {token_dir}")
+        if not os.path.isdir(token_dir):
+            raise RuntimeError(f"Token directory not found: {token_dir}")
+        try:
+            import garminconnect
+            ver = getattr(garminconnect, "__version__", "0.2.8")
+            is_legacy = has_legacy_only_tokens(token_dir)
+            if is_legacy and ver.startswith("0.3"):
+                raise RuntimeError("Token format changed in garminconnect 0.3.x. Run setup-garmin.")
+        except Exception:
+            pass
+        garmin = Garmin()
+        garmin.login(token_dir)
+        log("[Garmin] Authenticated via token.")
+        return garmin
+    except Exception as e:
+        log(f"[Garmin] Token login failed: {e}")
+        if email and password:
+            log(f"[Garmin] Refreshing token via fresh login as {email}")
+            try:
+                os.makedirs(token_dir, exist_ok=True)
+            except:
+                pass
+            # Try 0.3.x path
+            try:
+                garmin = Garmin(email, password)
+                garmin.login(token_dir)
+                log("[Garmin] Fresh login succeeded, token refreshed.")
+                return garmin
+            except Exception as e2:
+                log(f"[Garmin] Fresh login via token_dir failed: {e2}, trying garth fallback")
+                try:
+                    garmin = Garmin(email, password)
+                    garmin.garth.login(email, password)
+                    garmin.garth.dump(token_dir)
+                    # Try again via token
+                    garmin2 = Garmin()
+                    garmin2.login(token_dir)
+                    log("[Garmin] Authenticated via refreshed token (garth).")
+                    return garmin2
+                except Exception as e3:
+                    raise RuntimeError(f"Token and fresh login both failed: {e} | {e2} | {e3}")
+        raise
     log(f"[Garmin] Loading tokens from {token_dir}")
 
     if not os.path.isdir(token_dir):

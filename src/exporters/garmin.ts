@@ -72,11 +72,9 @@ function uploadToGarmin(
     const scriptPath: string = join(ROOT, 'garmin-scripts', 'garmin_upload.py');
     const args: string[] = [scriptPath];
 
+    if (tokenDir) args.push('--token-dir', expandTilde(tokenDir));
     if (email) args.push('--email', email);
     if (password) args.push('--password', password);
-    if (tokenDir && !email) {
-      args.push('--token-dir', expandTilde(tokenDir));
-    }
 
     const py = spawn(pythonCmd, args, {
       stdio: ['pipe', 'pipe', 'inherit'],
