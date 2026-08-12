@@ -224,17 +224,34 @@ export async function scanAndReadRaw(opts: ScanOptions): Promise<RawReading> {
 
     if (targetMac) {
       const mac = formatMac(targetMac);
-      bleLog.info('Scanning for device...');
+      bleLog.info(`Scanning for device ${mac}...`);
 
       if (abortSignal?.aborted) {
         throw abortSignal.reason ?? new DOMException('Aborted', 'AbortError');
       }
 
-      const waitPromise = withTimeout(
-        btAdapter.waitDevice(mac),
-        DISCOVERY_TIMEOUT_MS,
-        `Device ${mac} not found within ${DISCOVERY_TIMEOUT_MS / 1000}s`,
-      );
+      // If device already in cache (e.g., seen in previous autoDiscover poll), use it directly
+      // instead of waiting for a new DeviceAdded signal which may never come while scale sleeps.
+      let waitPromise: Promise<Device>;
+      try {
+        const addrs: string[] = await btAdapter.devices();
+        if (addrs.includes(mac)) {
+          bleLog.debug(`Device ${mac} already in cache, using directly`);
+          waitPromise = btAdapter.getDevice(mac) as unknown as Promise<Device>;
+        } else {
+          waitPromise = withTimeout(
+            btAdapter.waitDevice(mac),
+            DISCOVERY_TIMEOUT_MS,
+            `Device ${mac} not found within ${DISCOVERY_TIMEOUT_MS / 1000}s`,
+          ) as Promise<Device>;
+        }
+      } catch {
+        waitPromise = withTimeout(
+          btAdapter.waitDevice(mac),
+          DISCOVERY_TIMEOUT_MS,
+          `Device ${mac} not found within ${DISCOVERY_TIMEOUT_MS / 1000}s`,
+        ) as Promise<Device>;
+      }
 
       if (abortSignal) {
         // Wrap in a promise that cleans up the abort listener in all paths

@@ -208,9 +208,12 @@ export async function autoDiscover(
         bleLog.debug(`Discovered: ${name} [${addr}]`);
 
         // Try matching with name only (serviceUuids not available pre-connect on D-Bus).
-        // Adapters that require serviceUuids will fail to match here and need SCALE_MAC.
         const info: BleDeviceInfo = { localName: name, serviceUuids: [] };
-        const matched = resolveAdapter(info, adapters);
+        let matched = resolveAdapter(info, adapters);
+        // HS2S: allow name-only match for auto-discovery (serviceUuid not in pre-connect scan)
+        if (!matched && name.toLowerCase().includes('hs2s')) {
+          matched = adapters.find(a => a.name.includes('HS2S'));
+        }
         if (matched) {
           bleLog.info(`Auto-discovered: ${matched.name} (${name} [${addr}])`);
           return { device: dev, adapter: matched, mac: addr };
