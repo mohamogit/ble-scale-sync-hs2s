@@ -4,7 +4,7 @@ import type { BodyComposition, ScaleReading } from '../interfaces/scale-adapter.
 import type { AppContext } from './context.js';
 import { resolveUserProfile } from '../config/resolve.js';
 import { dispatchExports } from '../orchestrator.js';
-import { createLogger } from '../logger.js';
+import { createLogger, isDebugEnabled } from '../logger.js';
 import { fmtWeight } from './format.js';
 import { loadState, saveState, isDuplicate } from './state.js';
 
@@ -21,8 +21,6 @@ export async function processReading(
   const profile = resolveUserProfile(user, ctx.config.scale);
   const state = await loadState(statePath);
 
-  // Server time - we pulled data at this moment, disconnect already done
-  // (scanAndReadRaw returns only after GATT disconnect). Upload will use this.
   const serverNow = new Date();
 
   let lastSuccess = true;
@@ -33,16 +31,25 @@ export async function processReading(
     const reading = all[i];
     const isLast = i === all.length - 1;
 
-    // Dedup based on DEVICE timestamp + weight (to detect truly new record)
-    // Even though we upload with server time, we need device ts to know if it's new.
     if (isDuplicate(state, reading.timestamp, reading.weight)) {
       log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);
       continue;
     }
 
     const payload = raw.adapter.computeMetrics(reading, profile);
-    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} / ${payload.impedance} Ohm [device ts ${reading.timestamp?.toISOString() ?? 'none'} → server ${serverNow.toISOString()}]`);
-    log.info(`  BMI ${payload.bmi} Fat ${payload.bodyFatPercent}% Water ${payload.waterPercent}%`);
+    // HS2S has 4 impedances in offline 35B records but none are used for Garmin;
+    // Garmin gets scale-computed bodyFat/muscle/water directly (scaleComp).
+    // Only show raw impedance in debug mode.
+    if (isDebugEnabled()) {
+      const imp = reading.impedance ? `${reading.impedance} Ohm` : 'n/a';
+      const imps = (reading as any).impedances ? ` [raw4: ${(reading as any).impedances.join(',')}]` : '';
+      const sc = (reading as any).scaleComp;
+      const scStr = sc ? ` scaleComp: fat${sc.bodyFatPercent}% muscle${sc.muscleMass}kg water${sc.waterPercent}%` : ' (BIA fallback)';
+      log.debug(`Raw: ${fmtWeight(reading.weight, ctx.weightUnit)} / ${imp}${imps}${scStr} [device ts ${reading.timestamp?.toISOString() ?? 'none'}]`);
+    }
+    // Always show what will be uploaded to Garmin (weight + body comp, no impedance)
+    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} → server ${new Date(serverNow.getTime() - serverNow.getTimezoneOffset()*60000).toISOString().slice(0,19)} (local)`);
+    log.info(`  Upload → Garmin: Fat ${payload.bodyFatPercent}% Water ${payload.waterPercent}% Muscle ${payload.muscleMass}kg Bone ${payload.boneMass}kg Visceral ${payload.visceralFat} BMI ${payload.bmi}`);
 
     if (ctx.dryRun || !exporters) {
       log.info('Dry run - skipping export');
@@ -54,7 +61,6 @@ export async function processReading(
       latestReading = reading;
     }
 
-    // Upload uses SERVER time, not device RTC (avoids drift / battery reset issues)
     const context = {
       userName: user.name,
       userSlug: user.slug ?? 'user',
@@ -66,13 +72,12 @@ export async function processReading(
     if (isLast) lastSuccess = success;
   }
 
-  // Save device timestamp for dedup, not server time
   if (latestPayload && latestReading && lastSuccess) {
     await saveState(
       { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight },
       statePath,
     );
-    log.info(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
+    if (isDebugEnabled()) log.debug(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
   }
 
   return lastSuccess;
