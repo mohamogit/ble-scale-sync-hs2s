@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "tsx src/index.ts",
     "setup-garmin": "python3 garmin-scripts/setup_garmin.py",
-    "validate": "tsx src/config/validate-cli.ts"
+    "validate": "tsx src/config/validate-cli.ts",
+    "scan": "tsx src/scan.ts"
   },
   "keywords": [
     "smart-scale",
