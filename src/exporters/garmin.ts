@@ -169,8 +169,10 @@ export class GarminExporter implements Exporter {
 
   async export(data: BodyComposition, context?: ExportContext): Promise<ExportResult> {
     const pythonCmd = await findPython();
+    // Use local wall time without Z/millis: Garmin's FIT encoder does mktime(local), so UTC with Z would shift by timezone (e.g., PDT 18:25 -> 01:25Z next day)
+    const toLocalIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
     const payload: GarminUploadPayload = context?.timestamp
-      ? { ...data, timestamp: context.timestamp.toISOString() }
+      ? { ...data, timestamp: toLocalIso(context.timestamp) }
       : data;
 
     return withRetry(
