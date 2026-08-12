@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 import { createLogger } from '../logger.js';
 import type { BodyComposition } from '../interfaces/scale-adapter.js';
@@ -21,7 +22,6 @@ function findPython(): Promise<string> {
   if (cachedPython) return Promise.resolve(cachedPython);
   // Prefer local venv if present (Pi portable), fallback to system python
   const venvPython = join(ROOT, '.venv', 'bin', 'python');
-  const { existsSync } = require('node:fs') as typeof import('node:fs');
   if (existsSync(venvPython)) {
     cachedPython = venvPython;
     return Promise.resolve(cachedPython);
