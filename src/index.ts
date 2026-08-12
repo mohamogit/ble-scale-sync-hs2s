@@ -34,8 +34,6 @@ const resolved = resolveRuntimeConfig(config);
 if (config.runtime?.debug) setLogLevel(LogLevel.DEBUG);
 
 const ac = new AbortController();
-process.on('SIGINT', () => ac.abort('SIGINT'));
-process.on('SIGTERM', () => ac.abort('SIGTERM'));
 
 const ctx = createAppContext({
   config,
@@ -83,14 +81,19 @@ async function main() {
   }
 
   log.info(`Continuous mode, cooldown ${resolved.scanCooldownSec}s`);
-  await runContinuousLoop({
-    source,
-    processReading: runProcess,
-    signal: ctx.signal,
-    scanCooldownSec: resolved.scanCooldownSec,
-    continuous: true,
-  });
+  try {
+    await runContinuousLoop({
+      source,
+      processReading: runProcess,
+      signal: ctx.signal,
+      scanCooldownSec: resolved.scanCooldownSec,
+      continuous: true,
+    });
+  } finally {
+    try { await source.stop?.(); } catch {}
+  }
   log.info('Stopped.');
+  setTimeout(() => process.exit(0), 300);
 }
 
 main().catch(err=>{
@@ -99,3 +102,7 @@ main().catch(err=>{
   process.exitCode = 1;
   setTimeout(()=>process.exit(1), 200);
 });
+// Fallback: if main resolves normally in continuous mode, the Stopped + exit above handles it.
+// Also ensure SIGINT/SIGTERM always exits even if loop hangs
+process.on('SIGINT', () => { ac.abort('SIGINT'); setTimeout(()=>process.exit(0), 800); });
+process.on('SIGTERM', () => { ac.abort('SIGTERM'); setTimeout(()=>process.exit(0), 800); });
