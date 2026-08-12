@@ -22,7 +22,14 @@ export class PollReadingSource implements ReadingSource {
     return withTimeout(scan, POLL_CYCLE_TIMEOUT_MS, `Scan cycle exceeded ${POLL_CYCLE_TIMEOUT_MS/1000}s`);
   }
   async stop(): Promise<void> {
-    // no persistent connection; disconnect already done in scanAndReadRaw
-    // noble/node-ble handles cleanup per-cycle. No-op for singleshot exit.
+    try {
+      const { getAdapter } = await import('../ble/handler-node-ble/connection.js');
+      const adapter = await getAdapter(this.ctx.bleAdapter).catch(()=>null);
+      if (adapter) await adapter.stopDiscovery().catch(()=>{});
+    } catch {}
+    try {
+      const noble = await import('@stoprocent/noble').then(m=>m.default).catch(()=>null);
+      if (noble) (noble as any).stopScanning();
+    } catch {}
   }
 }

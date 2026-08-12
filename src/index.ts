@@ -102,7 +102,5 @@ main().catch(err=>{
   process.exitCode = 1;
   setTimeout(()=>process.exit(1), 200);
 });
-// Fallback: if main resolves normally in continuous mode, the Stopped + exit above handles it.
-// Also ensure SIGINT/SIGTERM always exits even if loop hangs
-process.on('SIGINT', () => { ac.abort('SIGINT'); setTimeout(()=>process.exit(0), 800); });
-process.on('SIGTERM', () => { ac.abort('SIGTERM'); setTimeout(()=>process.exit(0), 800); });
+process.on('SIGINT', () => ac.abort('SIGINT'));
+process.on('SIGTERM', () => ac.abort('SIGTERM'));
