@@ -21,4 +21,8 @@ export class PollReadingSource implements ReadingSource {
     });
     return withTimeout(scan, POLL_CYCLE_TIMEOUT_MS, `Scan cycle exceeded ${POLL_CYCLE_TIMEOUT_MS/1000}s`);
   }
+  async stop(): Promise<void> {
+    // no persistent connection; disconnect already done in scanAndReadRaw
+    // noble/node-ble handles cleanup per-cycle. No-op for singleshot exit.
+  }
 }

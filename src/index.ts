@@ -61,9 +61,24 @@ async function main() {
   const runProcess = (raw: any) => processReading(ctx, raw, exporters, statePath);
 
   if (!resolved.continuousMode) {
-    const raw = await source.nextReading(ctx.signal);
-    const ok = await runProcess(raw);
-    if (!ok) process.exitCode = 1;
+    let ok = false;
+    try {
+      const raw = await source.nextReading(ctx.signal);
+      ok = await runProcess(raw);
+      if (!ok) process.exitCode = 1;
+    } catch (err) {
+      if (ctx.signal.aborted) {
+        log.info('Aborted.');
+      } else {
+        log.error((err as Error).message);
+        process.exitCode = 1;
+      }
+    } finally {
+      try { await source.stop?.(); } catch {}
+      // BLE handlers (noble / node-ble) keep DBus / native handles alive;
+      // force exit after singleshot so `npm start` doesn't hang.
+      setTimeout(() => process.exit(process.exitCode ?? 0), 300);
+    }
     return;
   }
 
@@ -79,7 +94,8 @@ async function main() {
 }
 
 main().catch(err=>{
-  if (ctx.signal.aborted) { log.info('Stopped.'); return; }
+  if (ctx.signal.aborted) { log.info('Stopped.'); setTimeout(()=>process.exit(0), 200); return; }
   log.error(err.message);
   process.exitCode = 1;
+  setTimeout(()=>process.exit(1), 200);
 });
