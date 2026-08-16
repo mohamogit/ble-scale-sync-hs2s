@@ -806,10 +806,7 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
     for (let i = 0; i < deduped.length; i++) {
       const r = deduped[i];
       if (r.timestamp) {
-        if (i === deduped.length - 1) {
-          (r as any)._forceLive = true;
-          (r as any)._rawCount = pending.length;
-        }
+        if (i === deduped.length - 1) (r as any)._forceLive = true;
         this.pendingHistory.push(r);
       }
     }
