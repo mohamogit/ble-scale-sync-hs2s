@@ -57,7 +57,15 @@ export async function processReading(
       log.debug(`Raw: ${fmtWeight(reading.weight, ctx.weightUnit)} / ${imp}${imps}${scStr} [device ts ${reading.timestamp?.toISOString() ?? 'none'}]`);
     }
     // Always show what will be uploaded to Garmin (weight + body comp, no impedance)
-    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} → server ${new Date(serverNow.getTime() - serverNow.getTimezoneOffset()*60000).toISOString().slice(0,19)} (local)`);
+    // Use same TZ as Garmin export so log matches FIT timestamp
+    const _tz2 = process.env.TZ || 'America/Los_Angeles';
+    let _localStr2: string;
+    try {
+      const _fmt2 = new Intl.DateTimeFormat('en-CA', { timeZone: _tz2, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+      const _parts2 = Object.fromEntries(_fmt2.formatToParts(serverNow).map(p=>[p.type,p.value]));
+      _localStr2 = `${_parts2.year}-${_parts2.month}-${_parts2.day} ${_parts2.hour}:${_parts2.minute}:${_parts2.second}`;
+    } catch { _localStr2 = new Date(serverNow.getTime() - serverNow.getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' '); }
+    log.info(`Measurement: ${fmtWeight(payload.weight, ctx.weightUnit)} → server ${_localStr2} (${_tz2})`);
     log.info(`  Upload → Garmin: Fat ${payload.bodyFatPercent}% Water ${payload.waterPercent}% Muscle ${payload.muscleMass}kg Bone ${payload.boneMass}kg Visceral ${payload.visceralFat} BMI ${payload.bmi}`);
 
     if (ctx.dryRun || !exporters) {

@@ -9,6 +9,12 @@
 set -e
 cd "$(dirname "$0")"
 
+# Fix future-date: cron has no TZ → Node getTimezoneOffset=0 → UTC 03:34 uploaded as 03:34 local → Garmin shows next day
+# Force PDT so FIT mktime(local) is correct even from cron
+if [ -z "$TZ" ]; then
+  export TZ="America/Los_Angeles"
+fi
+
 # nvm on Pi (Node 22 LTS recommended; Node 24 fails noble gyp on aarch64)
 if [ -f "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1090

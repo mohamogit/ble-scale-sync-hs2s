@@ -169,8 +169,25 @@ export class GarminExporter implements Exporter {
 
   async export(data: BodyComposition, context?: ExportContext): Promise<ExportResult> {
     const pythonCmd = await findPython();
-    // Use local wall time without Z/millis: Garmin's FIT encoder does mktime(local), so UTC with Z would shift by timezone (e.g., PDT 18:25 -> 01:25Z next day)
-    const toLocalIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+    // Cron has no TZ (→ UTC) which caused future-date (03:34Z next day instead of 20:34 PDT).
+    // Use explicit America/Los_Angeles so FIT mktime(local) is correct even when Pi's env TZ is unset.
+    // Respects process.env.TZ / runtime.timezone if set.
+    const tz = process.env.TZ || (context as any)?.timezone || 'America/Los_Angeles';
+    const toLocalIso = (d: Date): string => {
+      try {
+        const fmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false,
+        });
+        const parts = Object.fromEntries(fmt.formatToParts(d).map(p => [p.type, p.value]));
+        return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+      } catch {
+        // fallback to old offset method
+        return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+      }
+    };
     const payload: GarminUploadPayload = context?.timestamp
       ? { ...data, timestamp: toLocalIso(context.timestamp) }
       : data;

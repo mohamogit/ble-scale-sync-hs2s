@@ -31,7 +31,17 @@ export interface Logger {
 export function createLogger(scope: string): Logger {
   const prefix = `[${scope}]`;
   const debugPrefix = `[${scope}:debug]`;
-  const timestamp = (): string => new Date().toISOString().replace('T', ' ').replace('Z', '');
+  const timestamp = (): string => {
+    // Show local America/Los_Angeles for readability; journalctl already shows local, but app log was UTC causing 7h confusion (03:34Z vs 20:34 PDT)
+    try {
+      const tz = process.env.TZ || 'America/Los_Angeles';
+      const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+      const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p=>[p.type,p.value]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+    } catch {
+      return new Date().toISOString().replace('T', ' ').replace('Z', '');
+    }
+  };
   const fmt = (pfx: string, msg: string): string => {
     const ts = timestamp();
     const nl = msg.match(/^(\n+)/);
