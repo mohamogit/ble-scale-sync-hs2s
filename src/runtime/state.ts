@@ -6,6 +6,7 @@ export interface SyncState {
   lastTimestamp?: string; // ISO device ts
   lastWeight?: number;
   lastServerTime?: string; // ISO server wall time of last successful upload (for stale RTC dedup)
+  lastHistoryHash?: string; // hash of last uploaded history (to detect new weigh-in with stale RTC)
 }
 
 const DEFAULT_STATE_PATH = join(process.cwd(), 'state.json');
@@ -28,7 +29,7 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
   await rename(tmp, path);
 }
 
-export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number, now?: Date): boolean {
+export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number, now?: Date, historyHash?: string): boolean {
   if (!timestamp || !state.lastTimestamp) return false;
   const lastMs = new Date(state.lastTimestamp).getTime();
   const curMs = timestamp.getTime();
@@ -40,6 +41,8 @@ export function isDuplicate(state: SyncState, timestamp: Date | undefined, weigh
   // Use server time gap to distinguish: if >30min since last upload, treat as new measurement.
   const sameWeight = state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) < 0.1;
   if (!sameWeight) return false;
+  // same ts + same weight → if history hash changed, it's a real new weigh-in even with stale RTC
+  if (historyHash && state.lastHistoryHash && historyHash !== state.lastHistoryHash) return false;
   // same ts + same weight → check server time gap
   if (state.lastServerTime && now) {
     const lastServerMs = new Date(state.lastServerTime).getTime();

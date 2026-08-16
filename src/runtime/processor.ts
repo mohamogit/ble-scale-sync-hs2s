@@ -26,6 +26,8 @@ export async function processReading(
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
+  // history hash for stale RTC detection (simple hash of all weights+ts)
+  const historyHash = all.map(r => `${r.timestamp?.getTime() ?? 0}:${r.weight.toFixed(2)}`).join('|');
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.
@@ -40,7 +42,7 @@ export async function processReading(
     const reading = candidates[i];
     const isLast = i === candidates.length - 1;
 
-    if (isDuplicate(state, reading.timestamp, reading.weight, serverNow)) {
+    if (isDuplicate(state, reading.timestamp, reading.weight, serverNow, historyHash)) {
       log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);
       continue;
     }
@@ -91,7 +93,7 @@ export async function processReading(
 
   if (latestPayload && latestReading && lastSuccess) {
     await saveState(
-      { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight, lastServerTime: serverNow.toISOString() },
+      { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight, lastServerTime: serverNow.toISOString(), lastHistoryHash: historyHash },
       statePath,
     );
     if (isDebugEnabled()) log.debug(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
