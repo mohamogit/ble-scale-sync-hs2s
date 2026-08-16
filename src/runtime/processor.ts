@@ -26,8 +26,7 @@ export async function processReading(
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
-  // Direct逐条比对: Pi saves complete all, handles same-time order, no hash, no RTC
-  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance, _isNewWeighIn: (r as any)._isNewWeighIn }));
+  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance, _isNewWeighIn: (r as any)._isNewWeighIn, _rawCount: (r as any)._rawCount }));
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.
@@ -42,7 +41,7 @@ export async function processReading(
     const reading = candidates[i];
     const isLast = i === candidates.length - 1;
 
-    if (isDuplicate(state, allForCompare)) {
+    if (isDuplicate(state, allForCompare, serverNow)) {
       log.info(`Skipping duplicate (all ${all.length} records, latest ${fmtWeight(reading.weight, ctx.weightUnit)}): history unchanged`);
       continue;
     }
