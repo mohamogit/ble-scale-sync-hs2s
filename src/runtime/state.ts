@@ -30,12 +30,9 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
 }
 
 export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number, now?: Date, historyHash?: string): boolean {
-  // Simplest Pi-side complete record: no RTC, no windows.
-  // Pi saves lastHistoryHash (hash of all history+reading). If history changed -> new weigh-in.
-  // If history same -> duplicate (2-min polling with same data).
-  if (!state.lastHistoryHash) return false; // first run
-  if (historyHash && historyHash !== state.lastHistoryHash) return false; // history changed -> new
-  // history same -> check weight as well (weight is part of hash, but keep explicit)
-  if (state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) >= 0.1) return false; // weight changed -> new
-  return true; // history same + weight same -> duplicate
+  // Pi saves complete history: any change -> new operation, faithful to actual steps.
+  // Don't look at weight values, just history. Even same weight twice -> historyHash changes (rawCount) -> new.
+  if (!state.lastHistoryHash) return false;
+  if (historyHash && historyHash !== state.lastHistoryHash) return false;
+  return true;
 }
