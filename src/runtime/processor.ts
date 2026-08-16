@@ -27,9 +27,18 @@ export async function processReading(
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
 
-  for (let i = 0; i < all.length; i++) {
-    const reading = all[i];
-    const isLast = i === all.length - 1;
+  // HS2S offline pull always replays up to 23 historic records every connection.
+  // On first ever run (no state.json) that would flood Garmin with old data.
+  // Only the newest force-live record is the current weigh-in.
+  const isFirstRun = !state.lastTimestamp;
+  const candidates = isFirstRun && all.length > 1 ? [all[all.length - 1]] : all;
+  if (isFirstRun && all.length > 1) {
+    log.info(`First run: ${all.length} historic records buffered, only uploading newest (device ts ${all[all.length-1].timestamp?.toISOString()})`);
+  }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const reading = candidates[i];
+    const isLast = i === candidates.length - 1;
 
     if (isDuplicate(state, reading.timestamp, reading.weight)) {
       log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);

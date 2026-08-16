@@ -29,7 +29,12 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
 
 export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number): boolean {
   if (!timestamp || !state.lastTimestamp) return false;
-  const sameTs = state.lastTimestamp === timestamp.toISOString();
+  const lastMs = new Date(state.lastTimestamp).getTime();
+  const curMs = timestamp.getTime();
+  // older than last synced → already seen (historic replay, e.g. 23-record HS2S offline pull)
+  if (curMs < lastMs) return true;
+  if (curMs > lastMs) return false;
+  // same second: treat as duplicate only if weight matches (within 0.1 kg)
   const sameWeight = state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) < 0.1;
-  return sameTs && sameWeight;
+  return sameWeight;
 }

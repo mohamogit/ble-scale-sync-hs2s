@@ -41,9 +41,20 @@ recover_bt() {
     fi
   fi
 
-  # dmesg wedged signature (last 10 lines)
-  if dmesg 2>/dev/null | tail -n 10 | grep -qE "0x200c.*-110|Unable to disable scanning|Frame reassembly failed"; then
-    echo "[run.sh] dmesg shows hci0 wedged, will reset"
+  # dmesg wedged signature — time-windowed (dmesg is persistent until reboot).
+  # Old code used tail -n 10 which matched forever after first wedge and caused
+  # reset every 2 min (your Aug 15 logs). Now only check last 2-5 minutes.
+  wedged_recent=0
+  if dmesg --since "5 minutes ago" 2>/dev/null | grep -qE "0x200c.*-110|Unable to disable scanning|Frame reassembly failed"; then
+    wedged_recent=1
+  elif dmesg 2>/dev/null | tail -n 30 | grep -qE "0x200c.*-110|Unable to disable scanning|Frame reassembly failed"; then
+    # fallback for old dmesg without --since: only count if journal confirms recent
+    if journalctl -k --since "5 minutes ago" 2>/dev/null | grep -qE "0x200c|Unable to disable scanning|Frame reassembly"; then
+      wedged_recent=1
+    fi
+  fi
+  if [ "$wedged_recent" = "1" ]; then
+    echo "[run.sh] dmesg shows recent hci0 wedge (last 5 min), will reset"
     need_reset=1
   fi
 
