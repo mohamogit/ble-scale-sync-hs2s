@@ -806,7 +806,10 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
     for (let i = 0; i < deduped.length; i++) {
       const r = deduped[i];
       if (r.timestamp) {
-        if (i === deduped.length - 1) (r as any)._forceLive = true;
+        if (i === deduped.length - 1) {
+          (r as any)._forceLive = true;
+          (r as any)._isNewWeighIn = true;
+        }
         this.pendingHistory.push(r);
       }
     }
@@ -918,6 +921,7 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
     if (this.pendingHistory.length > 0) {
       this.pendingHistory.reverse();
       (this.pendingHistory[this.pendingHistory.length - 1] as any)._forceLive = true;
+      (this.pendingHistory[this.pendingHistory.length - 1] as any)._isNewWeighIn = true;
     }
     bleLog.info(`iHealth HS2S: anon pull complete — ${this.pendingHistory.length} record(s) buffered as historic (newest force-live)`);
     this.measurePending = false;

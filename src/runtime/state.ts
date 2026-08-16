@@ -3,10 +3,9 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 export interface SyncState {
-  lastTimestamp?: string; // ISO device ts
+  lastAll?: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[];
   lastWeight?: number;
-  lastServerTime?: string; // ISO server wall time of last successful upload (for stale RTC dedup)
-  lastHistoryHash?: string; // hash of last uploaded history (to detect new weigh-in with stale RTC)
+  lastServerTime?: string;
 }
 
 const DEFAULT_STATE_PATH = join(process.cwd(), 'state.json');
@@ -29,18 +28,29 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
   await rename(tmp, path);
 }
 
-export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number, now?: Date, historyHash?: string): boolean {
-  // Pi saves complete history: any history change -> new operation.
-  // Same history + same weight -> duplicate, but allow after 12h for same-weight same-history new step
-  // (full history wraparound same data) and for rawCount-based same-weight new step.
-  if (!state.lastHistoryHash) return false;
-  if (historyHash && historyHash !== state.lastHistoryHash) return false;
-  // history same -> check weight (weight is part of hash, but keep explicit)
-  if (state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) >= 0.1) return false;
-  // history same + weight same -> check 12h window for full-wrap same data
-  if (now && state.lastServerTime) {
-    const gapMin = (now.getTime() - new Date(state.lastServerTime).getTime()) / 60000;
-    if (gapMin > 720) return false;
+export function isDuplicate(state: SyncState, all: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[]): boolean {
+  // Pi saves complete history, direct逐条比对, handles same-time order by sorting.
+  // Any new history change (new weigh-in) -> not duplicate, even with same weight.
+  if (!state.lastAll || state.lastAll.length === 0) return false;
+  if (all.length !== state.lastAll.length) return false;
+  const sortFn = (a: any, b: any) => {
+    const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return a.weight - b.weight;
+  };
+  const sAll = [...all].sort(sortFn);
+  const sLast = [...state.lastAll].sort(sortFn);
+  for (let i = 0; i < sAll.length; i++) {
+    const a = sAll[i], b = sLast[i];
+    if (Math.abs(a.weight - b.weight) >= 0.1) return false;
+    const at = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bt = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    if (Math.abs(at - bt) > 1000) return false;
+    if ((a.impedance ?? 0) !== (b.impedance ?? 0)) return false;
   }
+  // all same, check if latest has _isNewWeighIn flag (real new step with same data, full history wrap)
+  const latest: any = all[all.length - 1];
+  if (latest && latest._isNewWeighIn) return false;
   return true;
 }

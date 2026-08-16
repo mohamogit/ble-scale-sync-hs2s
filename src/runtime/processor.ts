@@ -26,13 +26,13 @@ export async function processReading(
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
-  // history hash: deduped history, no rawCount (rawCount fluctuates 17/23/60 causing every poll to look new)
-  const historyHash = all.map(r => `${r.timestamp?.getTime() ?? 0}:${r.weight.toFixed(2)}`).join('|');
+  // Direct逐条比对: Pi saves complete all, handles same-time order, no hash, no RTC
+  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance, _isNewWeighIn: (r as any)._isNewWeighIn }));
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.
   // Only the newest force-live record is the current weigh-in.
-  const isFirstRun = !state.lastTimestamp;
+  const isFirstRun = !state.lastAll || state.lastAll.length === 0;
   const candidates = isFirstRun && all.length > 1 ? [all[all.length - 1]] : all;
   if (isFirstRun && all.length > 1) {
     log.info(`First run: ${all.length} historic records buffered, only uploading newest (device ts ${all[all.length-1].timestamp?.toISOString()})`);
@@ -42,8 +42,8 @@ export async function processReading(
     const reading = candidates[i];
     const isLast = i === candidates.length - 1;
 
-    if (isDuplicate(state, reading.timestamp, reading.weight, serverNow, historyHash)) {
-      log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);
+    if (isDuplicate(state, allForCompare)) {
+      log.info(`Skipping duplicate (all ${all.length} records, latest ${fmtWeight(reading.weight, ctx.weightUnit)}): history unchanged`);
       continue;
     }
 
@@ -93,7 +93,7 @@ export async function processReading(
 
   if (latestPayload && latestReading && lastSuccess) {
     await saveState(
-      { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight, lastServerTime: serverNow.toISOString(), lastHistoryHash: historyHash },
+      { lastAll: allForCompare, lastWeight: latestReading.weight, lastServerTime: serverNow.toISOString() },
       statePath,
     );
     if (isDebugEnabled()) log.debug(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
