@@ -41,17 +41,17 @@ export function isDuplicate(state: SyncState, timestamp: Date | undefined, weigh
   // Use server time gap to distinguish: if >30min since last upload, treat as new measurement.
   const sameWeight = state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) < 0.1;
   if (!sameWeight) return false;
-  // same ts + same weight → if history hash changed, it's a real new weigh-in even with stale RTC
-  if (historyHash && state.lastHistoryHash && historyHash !== state.lastHistoryHash) return false;
   // same ts + same weight → check server time gap
+  // For stale RTC (device ts stuck), same weight next day should be allowed, but
+  // polling every 2min with same weight should be suppressed. Use 12h gap.
   if (state.lastServerTime && now) {
     const lastServerMs = new Date(state.lastServerTime).getTime();
     const gapMin = (now.getTime() - lastServerMs) / 60000;
-    if (gapMin > 30) return false; // stale RTC, new weigh-in after 30min
+    if (gapMin > 720) return false; // stale RTC, new weigh-in after 12h
   } else if (!state.lastServerTime && now) {
     // old state file without lastServerTime: use device ts age vs now as fallback
     const ageMin = (now.getTime() - curMs) / 60000;
-    if (ageMin > 60) return false; // device ts is >1h old, likely stale RTC new measurement
+    if (ageMin > 720) return false; // device ts is >12h old, likely stale RTC new measurement
   } else if (state.lastServerTime) {
     // no now provided, be conservative
     return true;
