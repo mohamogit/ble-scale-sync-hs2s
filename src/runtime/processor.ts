@@ -26,8 +26,9 @@ export async function processReading(
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
-  // history hash for stale RTC detection (simple hash of all weights+ts)
-  const historyHash = all.map(r => `${r.timestamp?.getTime() ?? 0}:${r.weight.toFixed(2)}`).join('|');
+  // history hash for stale RTC detection: include raw count so same weight same ts new weigh-in changes hash
+  const rawCount = (all[all.length-1] as any)?._rawCount ?? all.length;
+  const historyHash = `${rawCount}|` + all.map(r => `${r.timestamp?.getTime() ?? 0}:${r.weight.toFixed(2)}`).join('|');
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.
