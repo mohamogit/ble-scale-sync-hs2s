@@ -3,8 +3,9 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 export interface SyncState {
-  lastTimestamp?: string; // ISO
+  lastTimestamp?: string; // ISO device ts
   lastWeight?: number;
+  lastServerTime?: string; // ISO server wall time of last successful upload (for stale RTC dedup)
 }
 
 const DEFAULT_STATE_PATH = join(process.cwd(), 'state.json');
@@ -27,14 +28,30 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
   await rename(tmp, path);
 }
 
-export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number): boolean {
+export function isDuplicate(state: SyncState, timestamp: Date | undefined, weight: number, now?: Date): boolean {
   if (!timestamp || !state.lastTimestamp) return false;
   const lastMs = new Date(state.lastTimestamp).getTime();
   const curMs = timestamp.getTime();
   // older than last synced → already seen (historic replay, e.g. 23-record HS2S offline pull)
   if (curMs < lastMs) return true;
   if (curMs > lastMs) return false;
-  // same second: treat as duplicate only if weight matches (within 0.1 kg)
+  // same second: normally duplicate if weight matches, but HS2S RTC is stale
+  // (device ts stuck at 2026-08-14) so a real new weigh-in next day has same device ts.
+  // Use server time gap to distinguish: if >30min since last upload, treat as new measurement.
   const sameWeight = state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) < 0.1;
-  return sameWeight;
+  if (!sameWeight) return false;
+  // same ts + same weight → check server time gap
+  if (state.lastServerTime && now) {
+    const lastServerMs = new Date(state.lastServerTime).getTime();
+    const gapMin = (now.getTime() - lastServerMs) / 60000;
+    if (gapMin > 30) return false; // stale RTC, new weigh-in after 30min
+  } else if (!state.lastServerTime && now) {
+    // old state file without lastServerTime: use device ts age vs now as fallback
+    const ageMin = (now.getTime() - curMs) / 60000;
+    if (ageMin > 60) return false; // device ts is >1h old, likely stale RTC new measurement
+  } else if (state.lastServerTime) {
+    // no now provided, be conservative
+    return true;
+  }
+  return true;
 }

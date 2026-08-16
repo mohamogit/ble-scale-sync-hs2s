@@ -40,7 +40,7 @@ export async function processReading(
     const reading = candidates[i];
     const isLast = i === candidates.length - 1;
 
-    if (isDuplicate(state, reading.timestamp, reading.weight)) {
+    if (isDuplicate(state, reading.timestamp, reading.weight, serverNow)) {
       log.info(`Skipping duplicate (device ts ${reading.timestamp?.toISOString()}): ${fmtWeight(reading.weight, ctx.weightUnit)}`);
       continue;
     }
@@ -91,7 +91,7 @@ export async function processReading(
 
   if (latestPayload && latestReading && lastSuccess) {
     await saveState(
-      { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight },
+      { lastTimestamp: latestReading.timestamp?.toISOString(), lastWeight: latestReading.weight, lastServerTime: serverNow.toISOString() },
       statePath,
     );
     if (isDebugEnabled()) log.debug(`State saved (device ts): ${latestReading.timestamp?.toISOString()}`);
