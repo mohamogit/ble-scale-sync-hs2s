@@ -41,6 +41,9 @@ export function isDuplicate(state: SyncState, timestamp: Date | undefined, weigh
   // Use server time gap to distinguish: if >30min since last upload, treat as new measurement.
   const sameWeight = state.lastWeight !== undefined && Math.abs(state.lastWeight - weight) < 0.1;
   if (!sameWeight) return false;
+  // same ts + same weight → if history changed, it's a real new weigh-in even with stale RTC
+  // (Pi saves complete history, so new weigh-in is detected by history hash, not device RTC)
+  if (historyHash && state.lastHistoryHash && historyHash !== state.lastHistoryHash) return false;
   // same ts + same weight → check server time gap
   // For stale RTC (device ts stuck), same weight next day should be allowed, but
   // polling every 2min with same weight should be suppressed. Use 12h gap.
