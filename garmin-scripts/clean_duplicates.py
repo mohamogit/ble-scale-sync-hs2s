@@ -86,11 +86,10 @@ def main():
         return
     for m in to_delete:
         pk = m["samplePk"]
+        cdate = m.get("calendarDate") or args.date
         try:
-            # garminconnect delete: use g.delete_weigh_in ?
-            # Fallback via garth API
-            g.delete_body_composition(pk) if hasattr(g,"delete_body_composition") else g.garth.request("DELETE", f"/weight-service/weight/{pk}", api=True)
-            print(f"deleted {pk} {m['weight']}")
+            g.delete_weigh_in(str(pk), cdate)
+            print(f"deleted {pk} {m['weight']} {cdate}")
         except Exception as e:
             print(f"failed {pk}: {e}")
     print("done")
