@@ -62,21 +62,26 @@ def main():
     print(f"{args.date}: {len(metrics)} entries")
     for m in metrics[:5]:
         print(f"  {m['samplePk']} {m['weight']} {m['date']}")
-    # Group by weight±0.05, keep earliest
-    seen = {}
-    to_delete = []
-    for m in sorted(metrics, key=lambda x: x["date"]):
-        key = round(m["weight"]/50)  # 50g bucket
-        # more precise: exact weight
-        k = int(m["weight"])
-        if k not in seen:
-            seen[k]=m
-        else:
-            # same weight bucket -> duplicate, mark for deletion (keep first)
-            if abs(m["weight"]-seen[k]["weight"])<60:
-                to_delete.append(m)
-            else:
+    # For 08-16 loop flood (87 entries, all uploaded at same server time), keep only the latest 1 to avoid mis-dating historical weights to today.
+    # For other dates, keep earliest per 60g bucket.
+    if args.date == "2026-08-16" and len(metrics) > 10:
+        # keep only the most recent entry (latest date), delete rest
+        sorted_m = sorted(metrics, key=lambda x: x["date"])
+        keep = sorted_m[-1]
+        to_delete = [m for m in metrics if m["samplePk"] != keep["samplePk"]]
+        print(f"Aggressive 08-16 cleanup: keep latest {keep['samplePk']} {keep['weight']} {keep['date']}, delete {len(to_delete)}")
+    else:
+        seen = {}
+        to_delete = []
+        for m in sorted(metrics, key=lambda x: x["date"]):
+            k = int(m["weight"])
+            if k not in seen:
                 seen[k]=m
+            else:
+                if abs(m["weight"]-seen[k]["weight"])<60:
+                    to_delete.append(m)
+                else:
+                    seen[k]=m
     print(f"Would delete {len(to_delete)} duplicates, keep {len(metrics)-len(to_delete)}")
     if args.dry_run:
         print("dry-run, not deleting")
