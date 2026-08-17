@@ -9,7 +9,9 @@
     "start": "tsx src/index.ts",
     "setup-garmin": "python3 garmin-scripts/setup_garmin.py",
     "validate": "tsx src/config/validate-cli.ts",
-    "scan": "tsx src/scan.ts"
+    "scan": "tsx src/scan.ts",
+    "sync:time": "tsx src/tools/sync-time.ts",
+    "sync:time:debug": "DEBUG=1 tsx src/tools/sync-time.ts"
   },
   "keywords": [
     "smart-scale",
@@ -20,7 +22,7 @@
     "body-composition",
     "health"
   ],
-  "author": "Kristi\u00e1n Partl",
+  "author": "Kristián Partl",
   "license": "GPL-3.0",
   "engines": {
     "node": ">=22.0.0"
