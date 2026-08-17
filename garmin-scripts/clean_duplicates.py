@@ -12,9 +12,32 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 def get_client(token_dir):
-    g = Garmin()
-    g.login(str(Path(token_dir).expanduser()))
-    return g
+    # token_dir may be relative; mimic garmin_upload.py logic
+    token_dir = str(Path(token_dir).expanduser())
+    if not Path(token_dir).is_absolute():
+        token_dir = str((PROJECT_ROOT / token_dir).resolve())
+    # Try token first, fallback to email/password from config.yaml if needed
+    try:
+        g = Garmin()
+        g.login(token_dir)
+        print(f"[Garmin] token login ok: {token_dir}")
+        return g
+    except Exception as e:
+        print(f"[Garmin] token login failed: {e}", file=sys.stderr)
+        # fallback: read config.yaml for email/password
+        try:
+            import yaml
+            cfg = yaml.safe_load(open(PROJECT_ROOT / "config.yaml"))
+            u = cfg["users"][0]["exporters"][0]
+            email = u.get("email"); pwd = u.get("password")
+            if email and pwd:
+                print(f"[Garmin] trying fresh login as {email}", file=sys.stderr)
+                g = Garmin(email, pwd)
+                g.login(token_dir)
+                return g
+        except Exception as e2:
+            print(f"fresh login failed: {e2}", file=sys.stderr)
+        raise
 
 def main():
     ap = argparse.ArgumentParser()
