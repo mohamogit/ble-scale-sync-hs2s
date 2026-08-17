@@ -104,6 +104,8 @@ const CMD_OFFLINE_DATA_RESP = 0xb1; // offline (registered-user) data block
 const CMD_ANON_COUNT = 0x33; // anonymous data count request / response
 const CMD_ANON_DATA = 0x34; // anonymous data pull (index 2B BE)
 const CMD_ANON_DATA_RESP = 0xb4; // anonymous data page response
+const CMD_DELETE_OFFLINE = 0x32; // delete offline data (SDK: deleteOfflineData) — A9 32 01 + userId16
+const CMD_DELETE_OFFLINE_RESP = 0x32; // delete ack
 
 /** Number of records per 0x34 pull page (the scale returns a 4-record window). */
 const ANON_PAGE_SIZE = 4;
@@ -730,6 +732,16 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
     await this.send(p);
   }
 
+  private async deleteOfflineData(uid?: Buffer): Promise<void> {
+    const target = uid || this.offlinePull?.userId;
+    if (!target) return;
+    const p = Buffer.concat([Buffer.from([0xa9, CMD_DELETE_OFFLINE, 0x01]), target]);
+    bleLog.info(`iHealth HS2S: deleting offline data for ${target.toString().trim()} via A9 32`);
+    await this.send(p);
+    // wait briefly for ack (A9 32) — not strictly required, but mirrors SDK
+    await new Promise(r=>setTimeout(r, 500));
+  }
+
   private async sendOnlineUser(uid?: Buffer): Promise<void> {
     if (!this.ctx) return;
     const userId = uid ?? this.offlinePull?.userId;
@@ -826,6 +838,10 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
       if (Math.abs(driftH) > 24) bleLog.warn(`iHealth HS2S: RTC drift ${driftH.toFixed(1)}h — device clock stuck/inaccurate`);
     }
     if (hadUser) void this.sendOnlineUser(uid ?? undefined).catch(() => {});
+    // SDK 原样：读完后可按 deleteOfflineData 清空，置 HS2S_CLEAR=1 时执行（用户已确认可清空）
+    if (hadUser && pending.length>0 && process.env.HS2S_CLEAR==='1' && uid) {
+      void this.deleteOfflineData(uid ?? undefined).catch(()=>{});
+    }
     // Update last seen for driver-level continuous dedup (historic path also dedups via processor, this is belt-and-suspenders)
     const newest = deduped[deduped.length - 1];
     this.lastOfflineReport = { ts: newest.timestamp?.getTime() ?? 0, weight: newest.weight };

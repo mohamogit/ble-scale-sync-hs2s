@@ -11,7 +11,9 @@
     "validate": "tsx src/config/validate-cli.ts",
     "scan": "tsx src/scan.ts",
     "sync:time": "tsx src/tools/sync-time.ts",
-    "sync:time:debug": "DEBUG=1 tsx src/tools/sync-time.ts"
+    "sync:time:debug": "DEBUG=1 tsx src/tools/sync-time.ts",
+    "clear": "tsx src/tools/hs2s-clear.ts",
+    "clear:offline": "HS2S_CLEAR=1 tsx src/tools/hs2s-clear.ts"
   },
   "keywords": [
     "smart-scale",
