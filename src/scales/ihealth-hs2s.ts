@@ -817,6 +817,7 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
       }
     }
     bleLog.info(`iHealth HS2S: offline pull complete — ${deduped.length} unique / ${pending.length} raw record(s) buffered as historic (newest force-live)`);
+    this.measurePending = false;
     {
       const newestTs = deduped[deduped.length-1]?.timestamp?.getTime() ?? 0;
       const driftH = (Date.now() - newestTs)/3600000;
