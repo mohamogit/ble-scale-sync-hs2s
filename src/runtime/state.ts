@@ -1,9 +1,5 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { existsSync } from 'node:fs';
-
 export interface SyncState {
-  lastAll?: { weight: number; timestamp?: string; impedance?: number }[];
+  lastAll?: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[];
   lastWeight?: number;
   lastServerTime?: string;
 }
@@ -30,8 +26,8 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
 
 export function isDuplicate(
   state: SyncState,
-  all: { weight: number; timestamp?: string; impedance?: number }[],
-  _now?: Date,
+  all: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[],
+  now?: Date,
 ): boolean {
   if (!state.lastAll || state.lastAll.length === 0) return false;
   if (all.length !== state.lastAll.length) return false;
@@ -50,6 +46,17 @@ export function isDuplicate(
     const bt = b.timestamp ? new Date(b.timestamp).getTime() : 0;
     if (Math.abs(at - bt) > 2000) return false;
     if ((a.impedance ?? 0) !== (b.impedance ?? 0)) return false;
+  }
+  // RTC stuck 场景：设备时间不再走，history 指纹完全相同但用户确实又站了一次。
+  // 此时靠 _isNewWeighIn (scale 在本次连接中收到 0x24 measure finish) 且距离上次上传 >5min 才放行，避免 2 分钟轮询空转误推。
+  const latest: any = all[all.length - 1];
+  if (latest && latest._isNewWeighIn) {
+    if (state.lastServerTime && now) {
+      const gapMin = (now.getTime() - new Date(state.lastServerTime).getTime()) / 60000;
+      if (gapMin > 5) return false;
+    } else {
+      return false;
+    }
   }
   return true;
 }
