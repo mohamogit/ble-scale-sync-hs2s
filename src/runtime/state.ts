@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 export interface SyncState {
-  lastAll?: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean; _rawCount?: number }[];
+  lastAll?: { weight: number; timestamp?: string; impedance?: number }[];
   lastWeight?: number;
   lastServerTime?: string;
 }
@@ -28,7 +28,11 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
   await rename(tmp, path);
 }
 
-export function isDuplicate(state: SyncState, all: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean; _rawCount?: number }[], now?: Date): boolean {
+export function isDuplicate(
+  state: SyncState,
+  all: { weight: number; timestamp?: string; impedance?: number }[],
+  _now?: Date,
+): boolean {
   if (!state.lastAll || state.lastAll.length === 0) return false;
   if (all.length !== state.lastAll.length) return false;
   const sortFn = (a: any, b: any) => {
@@ -44,21 +48,8 @@ export function isDuplicate(state: SyncState, all: { weight: number; timestamp?:
     if (Math.abs(a.weight - b.weight) >= 0.1) return false;
     const at = a.timestamp ? new Date(a.timestamp).getTime() : 0;
     const bt = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    if (Math.abs(at - bt) > 1000) return false;
+    if (Math.abs(at - bt) > 2000) return false;
     if ((a.impedance ?? 0) !== (b.impedance ?? 0)) return false;
-  }
-  // same history same weight -> check rawCount (offline same data new weigh-in changes rawCount even if deduped hash same)
-  const latest: any = all[all.length - 1];
-  const lastLatest: any = state.lastAll ? state.lastAll[state.lastAll.length - 1] : null;
-  if (latest && lastLatest && latest._rawCount !== undefined && lastLatest._rawCount !== undefined && latest._rawCount !== lastLatest._rawCount) return false;
-  // same history same weight -> allow re-upload if latest has _isNewWeighIn (real new step)
-  if (latest && latest._isNewWeighIn) {
-    if (state.lastServerTime && now) {
-      const gapMin = (now.getTime() - new Date(state.lastServerTime).getTime()) / 60000;
-      if (gapMin > 5) return false;
-    } else {
-      return false;
-    }
   }
   return true;
 }

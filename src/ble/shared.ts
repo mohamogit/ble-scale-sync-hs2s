@@ -472,7 +472,18 @@ export function waitForRawReading(
         }
         return;
       }
-      if (forceLive) delete (reading as any)._forceLive;
+      if (forceLive) {
+        // Flush adapter's pending history (22 older records) into the shared HistoryBuffer
+        const drained = (adapter as any).drainHistory?.() as ScaleReading[] | undefined;
+        if (drained && drained.length) {
+          for (const r of drained) {
+            if (r.timestamp && !(r as any)._forceLive) {
+              if (history.push(r)) bleLog.debug(`Historical (drained): ${r.weight.toFixed(2)} kg @ ${r.timestamp.toISOString()}`);
+            }
+          }
+        }
+        delete (reading as any)._forceLive;
+      }
 
       if (adapter.isComplete(reading)) {
         const final = adapter.isFinal ? adapter.isFinal(reading) : true;

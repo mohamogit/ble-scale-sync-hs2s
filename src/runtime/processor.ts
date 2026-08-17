@@ -22,11 +22,19 @@ export async function processReading(
   const state = await loadState(statePath);
 
   const serverNow = new Date();
+  // RTC drift visibility (required by user)
+  const _deviceTs = all[all.length-1]?.timestamp;
+  if (_deviceTs) {
+    const driftH = (serverNow.getTime() - _deviceTs.getTime())/3600000;
+    if (Math.abs(driftH) > 24) log.warn(`Device RTC drift ${driftH.toFixed(1)}h — device clock inaccurate (RTC stuck), using server time for Garmin`);
+    else log.info(`Device RTC ${_deviceTs.toISOString()} (drift ${driftH.toFixed(1)}h) → Server ${serverNow.toISOString()}`);
+  }
 
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
-  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance, _isNewWeighIn: (r as any)._isNewWeighIn, _rawCount: (r as any)._rawCount }));
+  // Strip volatile internal flags (_isNewWeighIn/_rawCount) — they are not part of the stable fingerprint; RTC is shown but not trusted when drift >24h
+  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance }));
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.

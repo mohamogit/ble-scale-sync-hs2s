@@ -450,6 +450,8 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
    * Delivered oldest-first per notify into the shared history buffer.
    */
   private pendingHistory: ScaleReading[] = [];
+  /** Drain buffered history (excludes force-live newest) for HistoryBuffer. */
+  drainHistory(): ScaleReading[] { const out = [...this.pendingHistory]; this.pendingHistory = []; return out; }
   /** Registered-user offline pull state (the authoritative BIA-capable source). */
   private offlinePull: {
     active: boolean;
@@ -815,6 +817,11 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
       }
     }
     bleLog.info(`iHealth HS2S: offline pull complete — ${deduped.length} unique / ${pending.length} raw record(s) buffered as historic (newest force-live)`);
+    {
+      const newestTs = deduped[deduped.length-1]?.timestamp?.getTime() ?? 0;
+      const driftH = (Date.now() - newestTs)/3600000;
+      if (Math.abs(driftH) > 24) bleLog.warn(`iHealth HS2S: RTC drift ${driftH.toFixed(1)}h — device clock stuck/inaccurate`);
+    }
     if (hadUser) void this.sendOnlineUser(uid ?? undefined).catch(() => {});
     // Update last seen for driver-level continuous dedup (historic path also dedups via processor, this is belt-and-suspenders)
     const newest = deduped[deduped.length - 1];
