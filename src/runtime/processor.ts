@@ -33,8 +33,8 @@ export async function processReading(
   let lastSuccess = true;
   let latestPayload: BodyComposition | null = null;
   let latestReading: ScaleReading | null = null;
-  // 严格指纹：RTC 展示保留，但不信任 _isNewWeighIn（经验证会常年 true 导致每 5min 误推）
-  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance }));
+  // 保留 _isNewWeighIn 用于 RTC 卡住的真复称（已修复 offline 常 true）
+  const allForCompare = all.map(r => ({ weight: r.weight, timestamp: r.timestamp?.toISOString(), impedance: r.impedance, _isNewWeighIn: (r as any)._isNewWeighIn }));
 
   // HS2S offline pull always replays up to 23 historic records every connection.
   // On first ever run (no state.json) that would flood Garmin with old data.

@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
 export interface SyncState {
-  lastAll?: { weight: number; timestamp?: string; impedance?: number }[];
+  lastAll?: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[];
   lastWeight?: number;
   lastServerTime?: string;
 }
@@ -30,8 +30,8 @@ export async function saveState(state: SyncState, path = DEFAULT_STATE_PATH): Pr
 
 export function isDuplicate(
   state: SyncState,
-  all: { weight: number; timestamp?: string; impedance?: number }[],
-  _now?: Date,
+  all: { weight: number; timestamp?: string; impedance?: number; _isNewWeighIn?: boolean }[],
+  now?: Date,
 ): boolean {
   if (!state.lastAll || state.lastAll.length === 0) return false;
   if (all.length !== state.lastAll.length) return false;
@@ -50,6 +50,16 @@ export function isDuplicate(
     const bt = b.timestamp ? new Date(b.timestamp).getTime() : 0;
     if (Math.abs(at - bt) > 2000) return false;
     if ((a.impedance ?? 0) !== (b.impedance ?? 0)) return false;
+  }
+  // RTC stuck: 同重同ts但确实又站了一次，靠 _isNewWeighIn + 5min 间隔放行
+  const latest: any = all[all.length - 1];
+  if (latest && latest._isNewWeighIn) {
+    if (state.lastServerTime && now) {
+      const gapMin = (now.getTime() - new Date(state.lastServerTime).getTime()) / 60000;
+      if (gapMin > 5) return false;
+    } else {
+      return false;
+    }
   }
   return true;
 }
