@@ -40,9 +40,11 @@ export async function processReading(
   // On first ever run (no state.json) that would flood Garmin with old data.
   // Only the newest force-live record is the current weigh-in.
   const isFirstRun = !state.lastAll || state.lastAll.length === 0;
-  const isMigratingFromSingle = state.lastAll?.length === 1 && all.length > 1;
-  const candidates = (isFirstRun || isMigratingFromSingle) && all.length > 1 ? [all[all.length - 1]] : all;
-  if ((isFirstRun || isMigratingFromSingle) && all.length > 1) {
+  // HS2S always replays full history (23/24). We only ever upload the newest weigh-in, never the whole history.
+  // History is used solely for dedup fingerprinting.
+  const shouldOnlyUploadNewest = all.length > 1;
+  const candidates = shouldOnlyUploadNewest ? [all[all.length - 1]] : all;
+  if (isFirstRun && all.length > 1) {
     log.info(`First run: ${all.length} historic records buffered, only uploading newest (device ts ${all[all.length-1].timestamp?.toISOString()})`);
   }
 
