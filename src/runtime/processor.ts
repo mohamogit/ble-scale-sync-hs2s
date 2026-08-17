@@ -40,8 +40,9 @@ export async function processReading(
   // On first ever run (no state.json) that would flood Garmin with old data.
   // Only the newest force-live record is the current weigh-in.
   const isFirstRun = !state.lastAll || state.lastAll.length === 0;
-  const candidates = isFirstRun && all.length > 1 ? [all[all.length - 1]] : all;
-  if (isFirstRun && all.length > 1) {
+  const isMigratingFromSingle = state.lastAll?.length === 1 && all.length > 1;
+  const candidates = (isFirstRun || isMigratingFromSingle) && all.length > 1 ? [all[all.length - 1]] : all;
+  if ((isFirstRun || isMigratingFromSingle) && all.length > 1) {
     log.info(`First run: ${all.length} historic records buffered, only uploading newest (device ts ${all[all.length-1].timestamp?.toISOString()})`);
   }
 
