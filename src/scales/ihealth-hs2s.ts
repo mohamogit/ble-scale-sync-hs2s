@@ -576,17 +576,16 @@ export class IHealthHs2sAdapter implements ScaleAdapterCore, GattWiring, MultiCh
         // The profile weight is a user-set value — only the user id is used.
         this.offlinePull.userId = parseUserProfile(payload);
         if (this.offlinePull.userId) {
-          // 立刻校时：拿到 userId 后先发 A9 23 时间同步，再拉历史。
-          // 原来只在 finishOfflinePull 末尾发，导致 RTC 长时间不更新。
-          void this.sendOnlineUser(this.offlinePull.userId).catch(()=>{});
-          // Must query offline count (0x30) before pulling 0x31 - device
-          // returns 0 records for 0x31 unless 0x30 was sent first.
-          void this.sendOfflineCount().catch((error: unknown) => {
-            bleLog.warn(
-              `iHealth HS2S: offline count failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-            if (this.offlinePull) this.offlinePull.active = false;
-          });
+          // 先校时再拉历史：顺序发送避免并发丢帧（Pi UART 易 wedged）
+          void (async () => {
+            try { await this.sendOnlineUser(this.offlinePull!.userId!); } catch {}
+            try { await this.sendOfflineCount(); } catch (error: unknown) {
+              bleLog.warn(
+                `iHealth HS2S: offline count failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
+              if (this.offlinePull) this.offlinePull.active = false;
+            }
+          })();
         } else {
           bleLog.info('iHealth HS2S: no registered user (A0 count 0) — skipping offline area');
           // Treat as empty offline pull; fall through to anonymous tourist area.
