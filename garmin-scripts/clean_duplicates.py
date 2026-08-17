@@ -65,11 +65,14 @@ def main():
     # For 08-16 loop flood (87 entries, all uploaded at same server time), keep only the latest 1 to avoid mis-dating historical weights to today.
     # For other dates, keep earliest per 60g bucket.
     if args.date == "2026-08-16" and len(metrics) > 10:
-        # keep only the most recent entry (latest date), delete rest
-        sorted_m = sorted(metrics, key=lambda x: x["date"])
-        keep = sorted_m[-1]
+        # keep the most recent 91.39 (current scale latest) if exists, else most recent overall
+        candidates_91389 = [m for m in metrics if abs(m["weight"]-91389) < 1]
+        if candidates_91389:
+            keep = max(candidates_91389, key=lambda x: (x["date"], x["samplePk"]))
+        else:
+            keep = max(metrics, key=lambda x: (x["date"], x["samplePk"]))
         to_delete = [m for m in metrics if m["samplePk"] != keep["samplePk"]]
-        print(f"Aggressive 08-16 cleanup: keep latest {keep['samplePk']} {keep['weight']} {keep['date']}, delete {len(to_delete)}")
+        print(f"Aggressive 08-16 cleanup: keep latest 91.39 {keep['samplePk']} {keep['weight']} {keep['date']}, delete {len(to_delete)}")
     else:
         seen = {}
         to_delete = []
